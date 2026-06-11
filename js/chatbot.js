@@ -36,6 +36,13 @@ const ChatBot = {
             slogan: "Uma vida de luta. Uma vida de verdade.",
             frase: "Nada a temer senão o correr da luta.",
             lema: "O que aprendi, devo ao povo. O que faço, faço pelo povo.",
+            posicionamento: "Progressista de trajetória, não de discurso — a posição dele não foi construída para a eleição, é o resultado natural de quem viveu o que defende.",
+            slogans: [
+                "Uma vida de luta. Uma vida de verdade.",
+                "Um professor no Congresso.",
+                "De Minas, para o Brasil.",
+                "Experiência que serve, coragem que persiste."
+            ],
             trajetoria: [
                 { ano: "1967–68", fato: "Líder estudantil universitário em Minas Gerais" },
                 { ano: "1968", fato: "Preso político ao liderar a ocupação da Faculdade de Medicina da UFMG contra a ditadura militar" },
@@ -337,6 +344,8 @@ ${ChatBot.knowledge.faq.porQue}`
                 return `**O que diferencia João Batista:**
 
 ${ChatBot.knowledge.faq.diferencial}
+
+${c.posicionamento}
 
 ${c.diferenciais.map(d => `• ${d}`).join('\n')}`;
             }
