@@ -304,16 +304,47 @@
             messages.scrollTop = messages.scrollHeight;
         }
 
-        function sendMessage() {
+        // Cérebro do bot: LLM (Groq) do backend da campanha — interpreta a pergunta,
+        // conhece o material a fundo e fala bem. Se o backend cair, usa o conhecimento local.
+        const CHAT_ENDPOINT = 'https://web-production-b553a.up.railway.app/api/chat';
+        let chatHistory = [];
+
+        function showTyping() {
+            const div = document.createElement('div');
+            div.className = 'message bot';
+            div.id = 'typing-indicator';
+            div.innerHTML = '<p style="opacity:.6">vIrAvoto está digitando…</p>';
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+        function hideTyping() {
+            const t = document.getElementById('typing-indicator');
+            if (t) t.remove();
+        }
+
+        async function sendMessage() {
             const text = input.value.trim();
             if (!text) return;
             addMessage(text, 'user');
             input.value = '';
-            quickReplies.style.display = 'none';
-            setTimeout(() => {
-                const response = ChatBot.findResponse(text);
-                addMessage(response, 'bot');
-            }, 500);
+            if (quickReplies) quickReplies.style.display = 'none';
+            showTyping();
+            let response;
+            try {
+                const r = await fetch(CHAT_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text, history: chatHistory }),
+                });
+                const d = await r.json();
+                response = (d && d.reply) ? d.reply : ChatBot.findResponse(text);
+            } catch (e) {
+                response = ChatBot.findResponse(text); // fallback local se o cérebro estiver fora
+            }
+            hideTyping();
+            addMessage(response, 'bot');
+            chatHistory.push({ role: 'user', content: text }, { role: 'assistant', content: response });
+            if (chatHistory.length > 16) chatHistory = chatHistory.slice(-16);
         }
 
         sendBtn.addEventListener('click', sendMessage);
