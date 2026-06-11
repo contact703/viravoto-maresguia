@@ -211,34 +211,67 @@
             document.getElementById('voice-toggle').style.display = 'none';
         }
 
-        function speak(text) {
-            if (!voiceEnabled || !synthesis) return;
+        // Voz por ElevenLabs (via backend da campanha) com PLAY/PAUSE.
+        const TTS_ENDPOINT = 'https://web-production-b553a.up.railway.app/api/tts';
+        let currentAudio = null, currentBtn = null;
+
+        function setStatus(txt, cls) {
+            const s = document.getElementById('status');
+            if (s) { s.textContent = txt; s.className = cls || 'status'; }
+        }
+        function stopVoice() {
+            if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+            if (currentBtn) { currentBtn.textContent = '🔊'; currentBtn = null; }
+            if (synthesis) synthesis.cancel();
+            setStatus('');
+        }
+        function fallbackSpeak(text) {
+            if (!synthesis) return;
             synthesis.cancel();
-            const cleanText = text.replace(/[🎤👋👤📋🏛️🗳️📚🏥💼🌱🛡️🏠📱🎭⚖️🌍💡🔍🤝🔊🕊️🌾✊📖🙏🤲💎🤔🌎]/g, '')
-                                  .replace(/\*\*/g, '')
-                                  .replace(/\n+/g, '. ');
-            const utterance = new SpeechSynthesisUtterance(cleanText);
-            utterance.lang = 'pt-BR';
-            utterance.rate = 1.0;
-            utterance.pitch = 1.0;
-            const voices = synthesis.getVoices();
-            const ptVoice = voices.find(v => v.lang.startsWith('pt'));
-            if (ptVoice) utterance.voice = ptVoice;
-            utterance.onstart = () => {
-                document.getElementById('status').textContent = '🔊 Falando...';
-                document.getElementById('status').className = 'status speaking';
-            };
-            utterance.onend = () => {
-                document.getElementById('status').textContent = '';
-                document.getElementById('status').className = 'status';
-            };
-            synthesis.speak(utterance);
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang = 'pt-BR';
+            const v = synthesis.getVoices().find(x => x.lang.startsWith('pt'));
+            if (v) u.voice = v;
+            u.onstart = () => setStatus('🔊 Falando...', 'status speaking');
+            u.onend = () => setStatus('');
+            synthesis.speak(u);
+        }
+        async function speak(text, btn) {
+            // mesmo botão tocando -> alterna play/pause
+            if (currentAudio && currentBtn === btn && btn) {
+                if (currentAudio.paused) { currentAudio.play(); btn.textContent = '⏸'; setStatus('🔊 Falando...', 'status speaking'); }
+                else { currentAudio.pause(); btn.textContent = '▶️'; setStatus(''); }
+                return;
+            }
+            stopVoice();
+            const clean = String(text).replace(/[*_#`>]/g, '').replace(/\s+/g, ' ').trim();
+            if (!clean) return;
+            if (btn) btn.textContent = '⏳';
+            try {
+                const r = await fetch(TTS_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: clean }),
+                });
+                if (!r.ok) throw new Error('tts ' + r.status);
+                const url = URL.createObjectURL(await r.blob());
+                const audio = new Audio(url);
+                currentAudio = audio; currentBtn = btn || null;
+                setStatus('🔊 Falando...', 'status speaking');
+                if (btn) btn.textContent = '⏸';
+                audio.onended = () => { URL.revokeObjectURL(url); stopVoice(); };
+                await audio.play();
+            } catch (e) {
+                if (btn) btn.textContent = '🔊';
+                currentAudio = null; currentBtn = null;
+                fallbackSpeak(clean); // se o backend falhar, usa a voz do navegador
+            }
         }
 
         document.getElementById('voice-enabled').addEventListener('change', (e) => {
             voiceEnabled = e.target.checked;
             document.getElementById('voice-toggle').classList.toggle('active', voiceEnabled);
-            if (!voiceEnabled) synthesis.cancel();
+            if (!voiceEnabled) stopVoice();
         });
         document.getElementById('voice-toggle').classList.add('active');
 
@@ -262,8 +295,8 @@
             div.className = `message ${sender}`;
             const formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '</p><p>');
             if (sender === 'bot') {
-                div.innerHTML = `<p>${formattedText}</p><button class="play-btn" onclick="speak(this.parentElement.innerText)">🔊</button>`;
-                if (voiceEnabled) setTimeout(() => speak(text), 300);
+                div.innerHTML = `<p>${formattedText}</p><button class="play-btn" onclick="speak(this.parentElement.querySelector('p').innerText, this)" title="Ouvir / pausar">🔊</button>`;
+                if (voiceEnabled) setTimeout(() => speak(text, div.querySelector('.play-btn')), 300);
             } else {
                 div.innerHTML = `<p>${formattedText}</p>`;
             }
